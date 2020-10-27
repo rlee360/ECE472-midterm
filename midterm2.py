@@ -8,8 +8,10 @@ Original file is located at
 """
 
 # deps
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # set to only print out errors
 import tensorflow as tf
-#import tensorflow_datasets as tfds
+from keras.utils.np_utils import to_categorical #encode the categories for Cifar100
 import numpy as np
 from keras.utils.layer_utils import count_params
 
@@ -19,6 +21,13 @@ from tensorflow.compat.v1 import InteractiveSession
 config = ConfigProto()
 config.gpu_options.allow_growth = True
 session = InteractiveSession(config=config)
+
+# set the seeds for repeatable results
+np.random.seed(0)
+tf.random.set_seed(0)
+tts_seed = 31415 # train test split seed.
+#import tensorflow_datasets as tfds
+
 
 # download dataset
 train, test = tf.keras.datasets.cifar10.load_data()
@@ -44,11 +53,12 @@ def mobilenet_block(stride_2, out_channels, with_dropout=True):
     return [
         depthwise_conv((3, 3), padding='same',
                        strides=((2, 2) if stride_2 else (1, 1))),
-        activation(),
         batchnorm(),
+        activation(),
         regular_conv(int(out_channels), (1, 1)),
-        activation(),
         batchnorm(),
+        activation(),
+
 
         # experimenting with dropout levels
         # right now all models overfit without dropout
@@ -59,8 +69,8 @@ def regular_conv_block(stride_2, out_channels, with_dropout=True):
     return [
         regular_conv(int(out_channels), (3, 3), padding='same',
                     strides=((2, 2) if stride_2 else (1, 1))),
-        activation(),
-        batchnorm()
+        batchnorm(),
+        activation()
     ]
 
 # full mobilenet model; run this with rho=1/7 to work with CIFAR-10 without
@@ -171,7 +181,7 @@ def run_model(model_class, num_epochs, run_model=True, model_parms={}):
     model = model_class(**model_parms)
 
     metadata = {
-        'model': model.__class__.__name__,
+        'model': 'v1' if model_class == cifar_mobilenet_v1 else 'v2',
         'epochs': num_epochs,
         'params': model_parms,
         'summary': '',
@@ -207,12 +217,11 @@ def run_model(model_class, num_epochs, run_model=True, model_parms={}):
         # train
         history = model.fit(
             resized_train_images, train_labels,
-            epochs=num_epochs,
-            validation_data=(resized_test_images, test_labels)
-        ).history
+            epochs=num_epochs, validation_split=0.2, 
+            callbacks=[tf.keras.callbacks.EarlyStopping(monitor='val_accuracy',patience=10, min_delta=0.005)]).history
 
         # final test accuracy
-        test_accuracy = history['val_accuracy'][-1]
+        test_accuracy = model.evaluate(resized_test_images, test_labels, verbose=1, return_dict=True)
 
     return {
         'metadata': metadata,
@@ -220,10 +229,10 @@ def run_model(model_class, num_epochs, run_model=True, model_parms={}):
         'test_accuracy': test_accuracy
     }
 
-models = [cifar_mobilenet_v2]
-epochs = [300]
-alphas = [0.5]
-rhos = [0.5]
+models = [cifar_mobilenet_v1, cifar_mobilenet_v2]
+epochs = [100]
+alphas = [2, 1, 7/8, 0.75, 0.5]
+rhos = [1, 7/8, 0.75, 0.5]
 
 results = []
 
@@ -246,5 +255,5 @@ for model in models:
 import pickle
 from datetime import datetime
 
-pickle.dump(results, open('mobilev2-05-05-300-cifar10-' + datetime.now().strftime("%y-%m-%d-%H%M") + '.pkl', 'wb'))
+pickle.dump(results, open('mobilev1v2-full-cifar10-' + datetime.now().strftime("%y-%m-%d-%H%M") + '.pkl', 'wb'))
 
