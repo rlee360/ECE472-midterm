@@ -133,6 +133,7 @@ def cifar_mobilenet_v1(alpha=1, rho=1, use_mobilenet_block=True):
         average_pooling((int(rho * 4), int(rho * 4))),
         flatten(),
         dropout(0.2),
+        dense(1000),
         dense(10)
     ])
 
@@ -229,10 +230,10 @@ def run_model(model_class, num_epochs, run_model=True, model_parms={}):
         'test_accuracy': test_accuracy
     }
 
-models = [cifar_mobilenet_v1, cifar_mobilenet_v2]
+models = [cifar_mobilenet_v1]
 epochs = [100]
-alphas = [2, 1, 7/8, 0.75, 0.5]
-rhos = [1, 7/8, 0.75, 0.5]
+alphas = [1]#[2, 1, 7/8, 0.75, 0.5]
+rhos = [1] #[1, 7/8, 0.75, 0.5]
 
 results = []
 
@@ -255,5 +256,5 @@ for model in models:
 import pickle
 from datetime import datetime
 
-pickle.dump(results, open('mobilev1v2-full-cifar10-' + datetime.now().strftime("%y-%m-%d-%H%M") + '.pkl', 'wb'))
+pickle.dump(results, open('mobilev1dense1000-full-cifar10-' + datetime.now().strftime("%y-%m-%d-%H%M") + '.pkl', 'wb'))
 

@@ -29,7 +29,7 @@ mpl.rcParams['axes.unicode_minus'] = False  # because cmr10 does not have a Unic
 
 np.set_printoptions(edgeitems=30, linewidth=100000, formatter=dict(float=lambda x: "%.3g" % x))
 
-def plt_func(num_classes, num_epochs, accuracy, val_accuracy, loss, val_loss):
+def plt_func(num_classes, metadata, num_epochs, accuracy, val_accuracy, loss, val_loss):
     fig, (ax1, ax2) = plt.subplots(figsize=(8.5, 11), nrows=2, ncols=1)
     ax1.plot(range(1,num_epochs + 1), accuracy, label='Training Accuracy')
     ax1.plot(range(1,num_epochs + 1), val_accuracy, label='Validation Accuracy')
@@ -45,18 +45,18 @@ def plt_func(num_classes, num_epochs, accuracy, val_accuracy, loss, val_loss):
     ax2.set_ylabel('Loss', labelpad=25).set_rotation(0)
     ax2.legend()
 
-    fig.suptitle('This is a somewhat long figure title', fontsize=16)
+    fig.suptitle(metadata, fontsize=16)
     fig.tight_layout()
     #fig.savefig('hw4-cifar' + str(num_classes) + '-accuracy-loss.pdf', format='pdf')
 
-params = pickle.load(open('mobilev2-full-cifar10-20-10-26-1805.pkl', 'rb'))
+params = pickle.load(open('mobilev1v2-full-cifar10-20-10-27-0903.pkl', 'rb'))
 
-#print(params[0]['metadata'])
-
+#(params[0]['metadata']['model'], params[0]['metadata']['params'], len(params[i]['history']['accuracy']))
+#exit(0)
 
 for i in range(len(params)):
     print(params[i]['metadata']['num_trainable_params'])
-    plt_func(10, params[i]['metadata']['epochs'], params[i]['history']['accuracy'], params[i]['history']['val_accuracy'], params[i]['history']['loss'], params[i]['history']['val_loss'])
+    plt_func(10, params[i]['metadata']['model'] + ' ' + str(params[i]['metadata']['params']) + ' ' + str(len(params[i]['history']['accuracy'])), len(params[i]['history']['accuracy']), params[i]['history']['accuracy'], params[i]['history']['val_accuracy'], params[i]['history']['loss'], params[i]['history']['val_loss'])
 
 #x = []
 #y = []
