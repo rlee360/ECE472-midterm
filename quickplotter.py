@@ -1,76 +1,72 @@
 import numpy as np
-from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import pickle
-from datetime import datetime
 
-#import os
-#os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # set to only print out errors
-#import tensorflow as tf
-#from keras.utils.np_utils import to_categorical #encode the categories for Cifar100
-
-## to prevent program from completely consuming gpu memory
-#from tensorflow.compat.v1 import ConfigProto
-#from tensorflow.compat.v1 import InteractiveSession
-#config = ConfigProto()
-#config.gpu_options.allow_growth = True
-#session = InteractiveSession(config=config)
-
-# set the seeds for repeatable results
-np.random.seed(0)
-#tf.random.set_seed(0)
-tts_seed = 31415 # train test split seed.
-
-#set fonts
+# set fonts
 font = {'family': 'cmr10', 'size': 18}
 mpl.rc('font', **font)  # change the default font to Computer Modern Roman
 mpl.rcParams['axes.unicode_minus'] = False  # because cmr10 does not have a Unicode minus sign
 
 np.set_printoptions(edgeitems=30, linewidth=100000, formatter=dict(float=lambda x: "%.3g" % x))
 
-def plt_func(num_classes, num_epochs, accuracy, val_accuracy, loss, val_loss):
+def plt_func(model_name, history):
     fig, (ax1, ax2) = plt.subplots(figsize=(8.5, 11), nrows=2, ncols=1)
-    ax1.plot(range(1,num_epochs + 1), accuracy, label='Training Accuracy')
-    ax1.plot(range(1,num_epochs + 1), val_accuracy, label='Validation Accuracy')
-    ax1.set_title('Cifar' + str(num_classes) + ' Accuracy')
+    ax1.plot(history['accuracy'], label='Training Accuracy')
+    ax1.plot(history['val_accuracy'], label='Validation Accuracy')
+    ax1.set_title('Accuracy')
     ax1.set_xlabel('Epochs')
-    ax1.set_ylabel('Ratio', labelpad=25).set_rotation(0)
+    ax1.set_ylabel('Ratio')
+    ax1.set_ylim(0, 1)
     ax1.legend()
 
-    ax2.plot(range(1,num_epochs + 1), loss, label='Training Loss')
-    ax2.plot(range(1,num_epochs + 1), val_loss, label='Validation Loss')
-    ax2.set_title('Cifar' + str(num_classes) + ' Loss')
+    ax2.plot(history['loss'], label='Training Loss')
+    ax2.plot(history['val_loss'], label='Validation Loss')
+    ax2.set_title('Loss')
     ax2.set_xlabel('Epochs')
-    ax2.set_ylabel('Loss', labelpad=25).set_rotation(0)
+    ax2.set_ylabel('Loss')
+    ax2.set_ylim(0, 2)
     ax2.legend()
 
-    fig.suptitle('This is a somewhat long figure title', fontsize=16)
+    fig.suptitle(model_name, fontsize=24)
     fig.tight_layout()
     #fig.savefig('hw4-cifar' + str(num_classes) + '-accuracy-loss.pdf', format='pdf')
 
-params = pickle.load(open('mobilev2-full-cifar10-20-10-26-1805.pkl', 'rb'))
+# these two are the latest ones for mobilev1 and mobilev2
+# results = pickle.load(open('mobilev1-full-cifar10-20-10-28-0002.pkl', 'rb'))
+results = pickle.load(open('mobilev2-full-cifar10-20-10-28-0011.pkl', 'rb'))
 
-#print(params[0]['metadata'])
+# dimensions: model, alpha, rho, [num_weights, accuracy]
+accuracy_weights = np.zeros((2, 6, 6, 2))
+
+model_dict = {'v1': 0, 'v2': 1}
+alpha_dict = {2: 0, 1: 1, 0.9: 2, 0.8: 3, 0.75: 4, 0.5: 5}
+rho_dict = {1: 0, 30/32: 1, 28/32: 2, 24/32: 3, 20/32: 4, 16/32: 5}
+
+for model in results:
+    # plt_func(f"CIFAR-MobileNet-{model['metadata']['model']}; "
+    #          f"alpha={model['metadata']['params']['alpha']}; "
+    #          f"rho={model['metadata']['params']['rho']}",
+    #          model['history'])
+
+    # store accuracy vs. number of weights
+    # accuracy_weights.append([model['metadata']['num_trainable_params'], model['test_accuracy']['accuracy']])
+    accuracy_weights[model_dict[model['metadata']['model']], alpha_dict[model['metadata']['params']['alpha']], rho_dict[model['metadata']['params']['rho']]] = np.array([model['metadata']['num_trainable_params'], model['test_accuracy']['accuracy']])
+
+    print(len(model['history']['accuracy']))
 
 
-for i in range(len(params)):
-    print(params[i]['metadata']['num_trainable_params'])
-    plt_func(10, params[i]['metadata']['epochs'], params[i]['history']['accuracy'], params[i]['history']['val_accuracy'], params[i]['history']['loss'], params[i]['history']['val_loss'])
+# plot v1 alphas vs accuracies
+weight_counts = np.array(accuracy_weights)[1, :, :, 0]
+accuracies = np.array(accuracy_weights)[1, :, :, 1]
+print(weight_counts)
+print(accuracies)
 
-#x = []
-#y = []
-
-#for i in range(len(params)):
-#    x.append(params[i]['metadata']['num_trainable_params'])
-#    y.append(params[i]['test_accuracy'])
-
-#fig, ax = plt.subplots()
-#ax.scatter(x, y)
-#ax.set_xscale('log')
-##ax.set_ylim(bottom=0) 
-
-#for i, txt in enumerate(range(len(params))):
-#    ax.annotate(txt, (x[i], y[i]))
+plt.figure(figsize=(11, 8.5))
+plt.plot(weight_counts, accuracies)
+plt.xscale('log')
+plt.ylabel('Test accuracy')
+plt.xlabel('Number of trainable weights')
+plt.legend(['rho=1', 'rho=30/32', 'rho=28/32', 'rho=24/32', 'rho=20/32', 'rho=16/32'])
+plt.title('CIFAR-MobileNet-v2')
 plt.show()
-

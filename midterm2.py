@@ -102,6 +102,8 @@ def full_mobilenet(alpha=1, rho=1, use_mobilenet_block=True):
         flatten(),
         dropout(0.2),
 
+        dense(1000),
+
         # this differs from ImageNet because of number of classes
         dense(10)
     ])
@@ -222,12 +224,18 @@ def run_model(model_class, num_epochs, run_model=True, model_parms={}):
 
         # final test accuracy
         test_accuracy = model.evaluate(resized_test_images, test_labels, verbose=1, return_dict=True)
+    else:
+        history = None
+        test_accuracy = None
 
     return {
         'metadata': metadata,
         'history': history,
         'test_accuracy': test_accuracy
     }
+
+print(run_model(full_mobilenet, 0, run_model=False)['metadata']['summary'])
+exit(0)
 
 models = [cifar_mobilenet_v1, cifar_mobilenet_v2]
 epochs = [100]
