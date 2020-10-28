@@ -14,6 +14,7 @@ import tensorflow as tf
 from keras.utils.np_utils import to_categorical #encode the categories for Cifar100
 import numpy as np
 from keras.utils.layer_utils import count_params
+import keras.backend as K
 
 # to prevent program from completely consuming gpu memory
 from tensorflow.compat.v1 import ConfigProto
@@ -75,11 +76,11 @@ def regular_conv_block(stride_2, out_channels, with_dropout=True):
 
 # full mobilenet model; run this with rho=1/7 to work with CIFAR-10 without
 # further modification (designed for 224x224 image)
-def full_mobilenet(alpha=1, rho=1, use_mobilenet_block=True):
+def full_mobilenet(alpha=1, rho=1, use_mobilenet_block=True, input_tensor=None):
     block = mobilenet_block if use_mobilenet_block else regular_conv_block
 
     model = tf.keras.Sequential([
-        tf.keras.Input((int(rho * 224), int(rho * 224), 3)),
+        *([tf.keras.Input((int(rho * 224), int(rho * 224), 3))] if input_tensor is None else [tf.keras.Input(tensor=input_tensor)]),
 
         regular_conv(int(alpha * 32), (3, 3), padding='same', strides=(2, 2)),
 
@@ -97,15 +98,14 @@ def full_mobilenet(alpha=1, rho=1, use_mobilenet_block=True):
         *block(False, int(alpha * 512)),
 
         *block(True, int(alpha * 1024)),
+        *block(False, int(alpha * 1024)),
 
         average_pooling((int(rho * 7), int(rho * 7))),
         flatten(),
         dropout(0.2),
 
-        dense(1000),
-
         # this differs from ImageNet because of number of classes
-        dense(10)
+        dense(1000)
     ])
 
     model.compile(
@@ -118,11 +118,11 @@ def full_mobilenet(alpha=1, rho=1, use_mobilenet_block=True):
 
 # model def: run this for 20 epochs to get ~80% accuracy
 # uses larger weights than v2, but ~800k params
-def cifar_mobilenet_v1(alpha=1, rho=1, use_mobilenet_block=True):
+def cifar_mobilenet_v1(alpha=1, rho=1, use_mobilenet_block=True, input_tensor=None):
     block = mobilenet_block if use_mobilenet_block else regular_conv_block
 
     model = tf.keras.Sequential([
-        tf.keras.Input((int(rho * 32), int(rho * 32), 3)),
+        *([tf.keras.Input((int(rho * 32), int(rho * 32), 3))] if input_tensor is None else [tf.keras.Input(tensor=input_tensor)]),
 
         regular_conv(int(alpha * 32), (3, 3), padding='same'),
 
@@ -150,11 +150,11 @@ def cifar_mobilenet_v1(alpha=1, rho=1, use_mobilenet_block=True):
 # model def: alternate version; run this with 50 epochs to get ~80% accuracy
 # uses smaller weights than v1, only ~50k params, only increase weights when 
 # reducing image dimensions like in original mobilenet
-def cifar_mobilenet_v2(alpha=1, rho=1, use_mobilenet_block=True):
+def cifar_mobilenet_v2(alpha=1, rho=1, use_mobilenet_block=True, input_tensor=None):
     block = mobilenet_block if use_mobilenet_block else regular_conv_block
 
     model = tf.keras.Sequential([
-        tf.keras.Input((int(rho * 32), int(rho * 32), 3)),
+        *([tf.keras.Input((int(rho * 32), int(rho * 32), 3))] if input_tensor is None else [tf.keras.Input(tensor=input_tensor)]),
 
         regular_conv(int(alpha * 32), (3, 3), padding='same'),
 
@@ -179,16 +179,39 @@ def cifar_mobilenet_v2(alpha=1, rho=1, use_mobilenet_block=True):
     return model
 
 # run model, collect summary and history
+cum_flops, cum_parms = 0, 0
 def run_model(model_class, num_epochs, run_model=True, model_parms={}):
-    # create_model
-    model = model_class(**model_parms)
+    global cum_flops, cum_parms
+
+    # counting flops
+    # see: https://stackoverflow.com/a/59862883/2397327
+    session = tf.compat.v1.Session()
+    graph = tf.compat.v1.get_default_graph()
+
+    with graph.as_default():
+        with session.as_default():
+            # create_model
+            model = model_class(**model_parms, input_tensor=tf.compat.v1.placeholder('float32', shape=(1, int(model_parms['rho']*32), int(model_parms['rho']*32), 3)))
+
+            run_meta = tf.compat.v1.RunMetadata()
+            opts = tf.compat.v1.profiler.ProfileOptionBuilder.float_operation()
+            flops = tf.compat.v1.profiler.profile(graph=graph, run_meta=run_meta, cmd='op', options=opts)
+
+            opts = tf.compat.v1.profiler.ProfileOptionBuilder.trainable_variables_parameter()
+            params = tf.compat.v1.profiler.profile(graph=graph, run_meta=run_meta, cmd='op', options=opts)
+
+            flops, num_params = flops.total_float_ops - cum_flops, params.total_parameters - cum_parms
+            cum_flops += flops
+            cum_parms += num_params
 
     metadata = {
         'model': 'v1' if model_class == cifar_mobilenet_v1 else 'v2',
         'epochs': num_epochs,
         'params': model_parms,
         'summary': '',
-        'num_trainable_params': count_params(model.trainable_weights)
+        'num_trainable_params': count_params(model.trainable_weights),
+        'flops': flops,
+        'num_params': num_params
     }
 
     # save model summary to a string (not the default)
@@ -235,10 +258,10 @@ def run_model(model_class, num_epochs, run_model=True, model_parms={}):
         'test_accuracy': test_accuracy
     }
 
-models = [cifar_mobilenet_v1]
+models = [cifar_mobilenet_v1, cifar_mobilenet_v2]
 epochs = [100]
-alphas = [1]#[2, 1, 7/8, 0.75, 0.5]
-rhos = [1] #[1, 7/8, 0.75, 0.5]
+alphas = [2, 1, 0.9, 0.8, 0.75, 0.5]
+rhos = [1, 30/32, 28/32, 24/32, 20/32, 16/32]
 
 results = []
 
@@ -251,15 +274,20 @@ for model in models:
             for rho in rhos:
                 print(f'iteration {i}/{grid_count}: alpha: {alpha}; rho: {rho}; epochs: {epoch}; model: {model}')
                 i += 1
-                results.append(run_model(model, epoch, model_parms={
+
+                results.append(run_model(model, epoch, run_model=False, model_parms={
                     'alpha': alpha,
                     'rho': rho,
                     # 'use_mobilenet_block': False,
-                    # 'run_model': False
                 }))
 
 import pickle
 from datetime import datetime
 
-pickle.dump(results, open('mobilev1dense1000-full-cifar10-' + datetime.now().strftime("%y-%m-%d-%H%M") + '.pkl', 'wb'))
+for result in results:
+    result['metadata']['summary'] = None
+
+print(results)
+
+pickle.dump(results, open('num-params-' + datetime.now().strftime("%y-%m-%d-%H%M") + '.pkl', 'wb'))
 

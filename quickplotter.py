@@ -42,11 +42,10 @@ def plt_func(model_name, history):
     #fig.savefig('hw4-cifar' + str(num_classes) + '-accuracy-loss.pdf', format='pdf')
 
 # these two are the latest ones for mobilev1 and mobilev2
-# results = pickle.load(open('mobilev1-full-cifar10-20-10-28-0002.pkl', 'rb'))
 results = pickle.load(open('mobilev1-full-cifar10-20-10-28-0002.pkl', 'rb'))
 
 # dimensions: model, alpha, rho, [num_weights, accuracy]
-accuracy_weights = np.zeros((2, 6, 6, 2))
+accuracy_weights = np.zeros((2, 6, 6, 3))
 
 model_dict = {'v1': 0, 'v2': 1}
 alpha_dict = {2: 0, 1: 1, 0.9: 2, 0.8: 3, 0.75: 4, 0.5: 5}
@@ -60,40 +59,69 @@ for i, model in enumerate(results):
 
     # store accuracy vs. number of weights
     # accuracy_weights.append([model['metadata']['num_trainable_params'], model['test_accuracy']['accuracy']])
-    accuracy_weights[model_dict[model['metadata']['model']], alpha_dict[model['metadata']['params']['alpha']], rho_dict[model['metadata']['params']['rho']]] = np.array([model['metadata']['num_trainable_params'], model['test_accuracy']['accuracy']])
+    accuracy_weights[model_dict[model['metadata']['model']], alpha_dict[model['metadata']['params']['alpha']], rho_dict[model['metadata']['params']['rho']], 0] = model['metadata']['num_trainable_params']
+    accuracy_weights[model_dict[model['metadata']['model']], alpha_dict[model['metadata']['params']['alpha']], rho_dict[model['metadata']['params']['rho']], 1] = model['test_accuracy']['accuracy']
 
     # num epochs
     # print(len(model['history']['accuracy']))
 
-    print(model['metadata']['model'], model['metadata']['params']['alpha'], model['metadata']['params']['rho'], np.around(model['test_accuracy']['accuracy'], 2))
+    # print(model['metadata']['model'], model['metadata']['params']['alpha'], model['metadata']['params']['rho'], np.around(model['test_accuracy']['accuracy'], 2))
 
+results = pickle.load(open('mobilev2-full-cifar10-20-10-28-0011.pkl', 'rb'))
+for i, model in enumerate(results):
+    # plt_func(f"CIFAR-MobileNet-{model['metadata']['model']}; "
+    #          f"alpha={model['metadata']['params']['alpha']}; "
+    #          f"rho={model['metadata']['params']['rho']}",
+    #          model['history'])
+
+    # store accuracy vs. number of weights
+    # accuracy_weights.append([model['metadata']['num_trainable_params'], model['test_accuracy']['accuracy']])
+    accuracy_weights[model_dict[model['metadata']['model']], alpha_dict[model['metadata']['params']['alpha']], rho_dict[model['metadata']['params']['rho']], 0] = model['metadata']['num_trainable_params']
+    accuracy_weights[model_dict[model['metadata']['model']], alpha_dict[model['metadata']['params']['alpha']], rho_dict[model['metadata']['params']['rho']], 1] = model['test_accuracy']['accuracy']
+
+
+results = pickle.load(open('num-params-20-10-28-0535.pkl', 'rb'))
+for model in results:
+    accuracy_weights[model_dict[model['metadata']['model']], alpha_dict[model['metadata']['params']['alpha']], rho_dict[model['metadata']['params']['rho']], 2] = model['metadata']['flops']
 
 # plot v1 alphas vs accuracies
 weight_counts = np.array(accuracy_weights)[0, :, :, 0]
 accuracies = np.array(accuracy_weights)[0, :, :, 1]
+flops = np.array(accuracy_weights)[0, :, :, 2]
+
 print(weight_counts)
 print(accuracies)
+print(flops)
 
-plt.figure(figsize=(16, 10))
-plt.plot(weight_counts, accuracies)
-for i, line in enumerate(plt.gca().get_lines()):
-    line.set_color(['#e69f00', '#56b4e9', '#009e73', '#f0e442', '#0072b2', '#bb5300'][i])
-for weight in list(weight_counts.flatten()):
-    plt.axvline(x=weight, color='black', dashes=[40, 100], linewidth=0.2)
-
-alphas = alpha_dict.keys()
-positions = np.flip(np.unique(weight_counts))
-for alpha, position in zip(alphas, positions):
-    if alpha == 0.5:
-        plt.annotate('$\\alpha=$', (position*0.91, 0.721))
-    plt.annotate(str(np.around(alpha, 2)), (position*1.01, 0.721))
+# plt.figure()
+plt.scatter((flops/2).flatten(), accuracies.flatten())
 plt.xscale('log')
-plt.xticks([2e5, 3e5, 4e5, 5e5, 1e6, 2e6])
-plt.gca().xaxis.set_major_formatter(mpl.ticker.ScalarFormatter())
-plt.ylabel('Test accuracy')
-plt.xlabel('Number of trainable weights')
-plt.legend(['$\\rho=1$', '$\\rho=30/32$', '$\\rho=28/32$', '$\\rho=24/32$', '$\\rho=20/32$', '$\\rho=16/32$'], loc=2)
-plt.title('CIFAR-10-MobileNet-v1 Accuracy vs. Trainable Weights')
-plt.savefig('cifar10_v1_accuracy_vs_weights.eps')
-plt.savefig('cifar10_v1_accuracy_vs_weights.pdf')
+plt.show()
+
+# for row in accuracies:
+#     print(*np.around(row*100, 2), sep=' & ', end=' \\\\\n')
+#
+# plt.figure(figsize=(16, 10))
+# plt.plot(weight_counts, accuracies)
+# for i, line in enumerate(plt.gca().get_lines()):
+#     line.set_color(['#e69f00', '#56b4e9', '#009e73', '#f0e442', '#0072b2', '#bb5300'][i])
+# for weight in list(weight_counts.flatten()):
+#     plt.axvline(x=weight, color='black', dashes=[40, 100], linewidth=0.2)
+#
+# alphas = alpha_dict.keys()
+# positions = np.flip(np.unique(weight_counts))
+# for alpha, position in zip(alphas, positions):
+#     if alpha == 0.5:
+#         plt.annotate('$\\alpha=$', (position*0.91, 0.591))
+#     plt.annotate(str(np.around(alpha, 2)), (position*1.01, 0.591))
+# plt.xscale('log')
+# plt.xticks([2e4, 3e4, 4e4, 5e4, 1e5])
+# plt.gca().xaxis.set_major_formatter(mpl.ticker.ScalarFormatter())
+# plt.ylabel('Test accuracy')
+# plt.xlabel('Number of trainable weights')
+# plt.legend(['$\\rho=1$', '$\\rho=30/32$', '$\\rho=28/32$', '$\\rho=24/32$', '$\\rho=20/32$', '$\\rho=16/32$'], loc=2)
+# plt.title('CIFAR-10-MobileNet-v2 Accuracy vs. Trainable Weights')
+# plt.savefig('cifar10_v2_accuracy_vs_weights.eps')
+# plt.savefig('cifar10_v2_accuracy_vs_weights.pdf')
+# # plt.tight_layout()
 # plt.show()
